@@ -4,9 +4,14 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+
+import static com.mongodb.client.model.Filters.eq;
+
 import java.io.FileInputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -19,13 +24,10 @@ import org.bson.types.MaxKey;
 
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
-import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Sorts;
-import static com.mongodb.client.model.Filters.*;
-import static com.mongodb.client.model.Updates.*;
 
 /**
  * Hello world!
@@ -52,6 +54,7 @@ public class App
     private static shard aShards[];
     private static Long docCount = 0l;
     private static Long lastReportedDocs = 0l;
+    private static Long printEvery = 1000000L;
     
     private static MongoCollection<Document> chunkColl = null;
     
@@ -88,7 +91,7 @@ public class App
 		key2 = defaultProps.getProperty("Key2");
 		key3 = defaultProps.getProperty("Key3");
 		splitColl = defaultProps.getProperty("TargetNS");
-
+		
 		System.out.println("Connection is: "+defaultProps.getProperty("SourceConnection"));
 		MongoClientURI srcURI = new MongoClientURI(defaultProps.getProperty("SourceConnection"));
 		MongoClientURI dstURI = new MongoClientURI(defaultProps.getProperty("DestinationConnection"));
@@ -101,13 +104,14 @@ public class App
         MongoDatabase destDB = destClient.getDatabase(defaultProps.getProperty("DestinationDatabase"));
         
         chunkColl = destDB.getCollection(defaultProps.getProperty("DestinationCollection"));
+        String pe = defaultProps.getProperty("PrintEvery","1000");
+        printEvery = Long.parseLong(pe);
+        
         /*
          *  Drop existing chunk definitions
          */
         chunkColl.deleteMany(eq("ns", splitColl));
-        /*
-         * Count the existing shards
-         */
+        
         MongoCollection<Document> shardColl = confDB.getCollection("shards");
         MongoCursor<Document> shardCur = shardColl.find().iterator();
         
@@ -122,33 +126,73 @@ public class App
         
         //MongoCollection<Document> shardColl = sourceDB.getCollection("shards");
         
-        MongoCollection<Document> sourceColl = sourceDB.getCollection("shardStats");
+        MongoCollection<Document> sourceColl = sourceDB.getCollection(defaultProps.getProperty("StatsCollection"));
         //FindIterable<Document> documents = sourceColl.find().sort(Sorts.orderBy(Sorts.ascending("_id")))
-        MongoCursor<Document> cursor = sourceColl.find().sort(Sorts.orderBy(Sorts.ascending("_id"))).noCursorTimeout(true).iterator();   
+        MongoCursor<Document> cursor = sourceColl.find()
+        		.projection(new Document("_id",0)
+        		.append(key1,1)
+        		.append(key2,1)
+        		.append(key3,1))
+        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
+        		.noCursorTimeout(true).iterator();   
         
-        LinkedHashMap<String,Long> splits = new LinkedHashMap<String,Long>();
+        Long curr1 = -1L;
+        Long curr2 = -1L;
+        String curr3 = "";
+        Long monthCount = 0l;
+        SimpleDateFormat genMon=new SimpleDateFormat("yyyyMM");
+        
+        LinkedList<monCount> splits = new LinkedList<monCount>();
         try {
 	        while (cursor.hasNext()) {
 	        	Document thisRow = cursor.next();
-	        	Document group = (Document) thisRow.get("_id");
-	        	long accid = (long) group.getLong("AccountID");
-	        	long devid = (long) group.getLong("Device");
-	        	String mon = group.getString("Month");
-	        	long count = thisRow.getDouble("EventCount").longValue();
-	        	if (accid == currentAccount && devid == currentDevice) {  /* Same Device */
-	        		splits.put(mon, count);
+	        	
+	        	Long in1 = thisRow.getLong(key1);
+	        	Long in2 = thisRow.getLong(key2);
+	        	Date in3 = thisRow.getDate(key3);
+	        	if (in3 == null) continue; /* Ignore documents without an eventDate */
+	        	String inMon = genMon.format(in3);
+
+	        	if (in1.equals(curr1) && in2.equals(curr2) && inMon.contentEquals(curr3)) {
+	        		monthCount++;
+	        		continue;
+	        	}
+	        	//System.out.println(curr1.toString()+" - "+curr2.toString());
+	        	Long accid = curr1;
+	        	Long devid = curr2;
+	        	String mon = curr3;
+	        	Long count = monthCount;
+        		curr1 = in1;
+        		curr2 = in2;
+        		curr3 = inMon;
+
+        		
+	        	if (monthCount.equals(0L)) { /* First time through no data to record */
+	        		monthCount = 1L;
+	        		continue;
+	        	}
+        		monthCount=1L;   /* Count the read ahead entry */
+	        	/*
+	        	 * Finished counting a month
+	        	 */
+
+	        	if (accid.equals(currentAccount) && devid.equals(currentDevice)) {  /* Same Device */
+	        		monCount split = new monCount(mon,count);
+	        		splits.addFirst(split);
 	        		deviceEvents += count;
 	        	}
 	        	else {
 	        		if ( chunkEvents + deviceEvents > chunkFull) {  /* New device so break here */
-	        			chunkEvents = generateChunk(accid,devid, splits,chunkEvents, deviceEvents);
+	        			chunkEvents = generateChunk(currentAccount,currentDevice, splits,chunkEvents, deviceEvents);
 	        			splits.clear();
-	        			splits.put(mon, count);
+		        		monCount split = new monCount(mon,count);
+		        		splits.addFirst(split);
 	        			deviceEvents = count;
 	        		}
 	        		else {   /* Multiple devices in the chunk */
 	        			splits.clear();
-	        			splits.put(mon, count);
+		        		monCount split = new monCount(mon,count);
+		        		splits.addFirst(split);
 	        			chunkEvents += deviceEvents;  /* Count previous device */
 	        			deviceEvents = count;
 	        		}
@@ -159,13 +203,12 @@ public class App
 	        }
         } catch(Exception e) {
         	System.out.println(e.getMessage());
+        	e.printStackTrace(System.out);
         }
-        finally {
-        
+        finally {        
             cursor.close();
             shard lastShard = findShard(false);
             emitChunk(maxkey,lastShard);   /* Everything left goes to the end */
-            lastShard.addAllocatedChunks(1L);
         }
 		
 		for (shard test : App.aShards) {
@@ -174,7 +217,7 @@ public class App
         
         		
     }
-	private static Long generateChunk(Long acc, Long dev, LinkedHashMap<String,Long> perMonth,Long chunkEvents, Long noEvents) {
+	private static Long generateChunk(Long acc, Long dev, LinkedList<monCount> perMonth,Long chunkEvents, Long noEvents) {
 		
         SimpleDateFormat parser=new SimpleDateFormat("yyyyMMdd");
         docCount += chunkEvents;  /* Counts the preceding docs */
@@ -184,14 +227,16 @@ public class App
 			emitChunk(acc,dev,minkey,myShard);
 			Long numChunks = 1L;
 			
-			Set set = perMonth.entrySet();
-			Iterator i = set.iterator();
+			ListIterator<monCount> i = perMonth.listIterator();
+/* 
+ * The entry date is backwards in the index so reverse the months
+ */
 			
 			while (i.hasNext()) {
 				@SuppressWarnings("unchecked")
-				Map.Entry<String, Long> me = (Map.Entry<String,Long>)i.next();
-	        	String mon = me.getKey();
-	        	Long count = me.getValue();
+				monCount me = (monCount)i.next();
+	        	String mon = me.getMonth();
+	        	Long count = me.getCount();
 	        	docCount += count;
 	       
 	        	Date monStart = null;
@@ -213,14 +258,14 @@ public class App
 	        	}
 	        	else {
 	        		Calendar monMid = (Calendar)monFirst.clone();
-	        		Long chunksRequired = (count / chunkMax)+1;
-	        		if (chunksRequired == 2) {     
+	        		long chunksRequired = (count / chunkMax)+1;
+	        		if (chunksRequired == 2L) {     
 	        		//	System.out.println("2 per Month for: "+mon);
 	        			monMid.add(Calendar.DATE, 15);
 	        			emitChunk(acc,dev,monMid,myShard);
 	        			emitChunk(acc,dev,monEnd,myShard);
 	        			numChunks += 2;
-	        		} else if ( chunksRequired < 4) {
+	        		} else if ( chunksRequired < 4L) {
 	        		//	System.out.println("Weekly for: "+mon);
 	        			monMid.add(Calendar.DATE, 7);
 	        			emitChunk(acc,dev,monMid,myShard);
@@ -242,7 +287,7 @@ public class App
 			}
 			emitChunk(acc,dev,maxkey,myShard);    /* Empty shard for future growth */
         	myShard.addAllocatedChunks(numChunks+1);
-        	if ((docCount-lastReportedDocs)> 10000000) {
+        	if ((docCount-lastReportedDocs)> printEvery) {
         		System.out.println("Done "+docCount.toString());
         		lastReportedDocs = docCount;
         	}
@@ -251,7 +296,7 @@ public class App
 			shard myShard = findShard(false);
 			emitChunk(acc,dev,minkey,myShard);
 			myShard.addAllocatedChunks(1L);
-        	if ((docCount-lastReportedDocs)> 10000000) {
+        	if ((docCount-lastReportedDocs)> printEvery) {
         		System.out.println("Done "+docCount.toString());
         		lastReportedDocs = docCount;
         	}
@@ -266,7 +311,7 @@ public class App
 		
 		for (shard test : App.aShards) {
 			if (isHot) {
-				if ((minHot == -1L) || (test.getHotDevices() < minHot) ) {
+				if (minHot.equals(-1L) || (test.getHotDevices() < minHot) ) {
 					minHot = test.getHotDevices();
 					found = test;
 				}
