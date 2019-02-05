@@ -5,6 +5,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Properties;
@@ -20,6 +21,8 @@ import org.bson.BsonObjectId;
 import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.bson.types.MinKey;
+import org.bson.types.ObjectId;
+import org.bson.types.BSONTimestamp;
 import org.bson.types.MaxKey;
 
 import com.mongodb.MongoClient;
@@ -56,12 +59,6 @@ public class App
     private static Long lastReportedDocs = 0l;
     private static Long printEvery = 1000000L;
     
-    private static MongoCollection<Document> chunkColl = null;
-    
-    private static Document breakPt = new Document("accountId",minkey)
-			.append("deviceId",minkey)
-			.append("eventDate",minkey);
-    private static String nextChunk = "deviceState.deviceState-accountId_MinKeydeviceId_MinKeyeventDate_Min";
 
 	public static void main( String[] args )
     {
@@ -70,6 +67,7 @@ public class App
 		Long deviceEvents = 0l;
 		Long currentDevice = -1l;
 		long currentAccount = -1l;
+		genChunk chunkOut = null;
 		
 		String propsFile = "default.properties";
 		
@@ -92,7 +90,7 @@ public class App
 		key3 = defaultProps.getProperty("Key3");
 		splitColl = defaultProps.getProperty("TargetNS");
 		
-		System.out.println("Connection is: "+defaultProps.getProperty("SourceConnection"));
+		//System.out.println("Connection is: "+defaultProps.getProperty("SourceConnection"));
 		MongoClientURI srcURI = new MongoClientURI(defaultProps.getProperty("SourceConnection"));
 		MongoClientURI dstURI = new MongoClientURI(defaultProps.getProperty("DestinationConnection"));
 		
@@ -103,14 +101,40 @@ public class App
         MongoDatabase confDB = destClient.getDatabase("config");
         MongoDatabase destDB = destClient.getDatabase(defaultProps.getProperty("DestinationDatabase"));
         
-        chunkColl = destDB.getCollection(defaultProps.getProperty("DestinationCollection"));
+        /*
+         * Check the destination collection is sharded
+         */
+        MongoCollection<Document> collColl = confDB.getCollection("collections");
+        MongoCursor<Document> collDef = collColl.find(new Document("_id",splitColl)).iterator();
+        if (collDef.hasNext()) {
+        	Document collDoc = collDef.next();
+        	ObjectId epoch = collDoc.getObjectId("lastmodEpoch");
+        	Date version = (Date) collDoc.get("lastmod");
+        	@SuppressWarnings("unchecked")
+			Document collKeys = (Document) collDoc.get("key");
+        	boolean collDroped = collDoc.getBoolean("dropped");
+        	if (collDroped || !collKeys.getDouble(key1).equals(1.0)) {
+        		System.out.println(splitColl+" is not an active sharded collection.");
+        		return;
+        	}
+            MongoCollection<Document> chunkColl = destDB.getCollection(defaultProps.getProperty("DestinationCollection"));
+            chunkOut = new genChunk(splitColl,epoch,chunkColl,key1,key2,key3);
+        }
+        else {
+        	System.out.println(splitColl+" is not a sharded collection.");
+        	return;
+        }
+        
+        
+
+        
         String pe = defaultProps.getProperty("PrintEvery","1000");
         printEvery = Long.parseLong(pe);
         
         /*
          *  Drop existing chunk definitions
          */
-        chunkColl.deleteMany(eq("ns", splitColl));
+        chunkOut.clearChunks();
         
         MongoCollection<Document> shardColl = confDB.getCollection("shards");
         MongoCursor<Document> shardCur = shardColl.find().iterator();
@@ -147,9 +171,16 @@ public class App
 	        while (cursor.hasNext()) {
 	        	Document thisRow = cursor.next();
 	        	
-	        	Long in1 = thisRow.getLong(key1);
-	        	Long in2 = thisRow.getLong(key2);
-	        	Date in3 = thisRow.getDate(key3);
+	        	Long in1, in2;
+	        	Date in3;
+	        	try {
+	        		in1 = thisRow.getLong(key1);
+	        		in2 = thisRow.getLong(key2);
+	        		in3 = thisRow.getDate(key3);
+	        	} catch (Exception e) {
+	        		System.out.println(e.getMessage());
+	        		continue; /* Unexpected key value - just skip */
+	        	}
 	        	if (in3 == null) continue; /* Ignore documents without an eventDate */
 	        	String inMon = genMon.format(in3);
 
@@ -183,7 +214,7 @@ public class App
 	        	}
 	        	else {
 	        		if ( chunkEvents + deviceEvents > chunkFull) {  /* New device so break here */
-	        			chunkEvents = generateChunk(currentAccount,currentDevice, splits,chunkEvents, deviceEvents);
+	        			chunkEvents = generateChunk(currentAccount,currentDevice, splits,chunkEvents, deviceEvents, chunkOut);
 	        			splits.clear();
 		        		monCount split = new monCount(mon,count);
 		        		splits.addFirst(split);
@@ -208,7 +239,7 @@ public class App
         finally {        
             cursor.close();
             shard lastShard = findShard(false);
-            emitChunk(maxkey,lastShard);   /* Everything left goes to the end */
+            chunkOut.emitChunk(maxkey,lastShard);   /* Everything left goes to the end */
         }
 		
 		for (shard test : App.aShards) {
@@ -217,14 +248,14 @@ public class App
         
         		
     }
-	private static Long generateChunk(Long acc, Long dev, LinkedList<monCount> perMonth,Long chunkEvents, Long noEvents) {
+	private static Long generateChunk(Long acc, Long dev, LinkedList<monCount> perMonth,Long chunkEvents, Long noEvents, genChunk chunkOut) {
 		
         SimpleDateFormat parser=new SimpleDateFormat("yyyyMMdd");
         docCount += chunkEvents;  /* Counts the preceding docs */
         
 		if (noEvents > deviceHot) {
 			shard myShard = findShard(true);
-			emitChunk(acc,dev,minkey,myShard);
+			chunkOut.emitChunk(acc,dev,minkey,myShard);
 			Long numChunks = 1L;
 			
 			ListIterator<monCount> i = perMonth.listIterator();
@@ -253,7 +284,7 @@ public class App
 	        	monEnd.add(Calendar.MONTH, 1);
 	        	if (count < chunkMax) {
 	        	//	System.out.println("1 Month for: "+mon);
-	        		emitChunk(acc,dev,monEnd,myShard);
+	        		chunkOut.emitChunk(acc,dev,monEnd,myShard);
 	        		numChunks++;
 	        	}
 	        	else {
@@ -262,30 +293,30 @@ public class App
 	        		if (chunksRequired == 2L) {     
 	        		//	System.out.println("2 per Month for: "+mon);
 	        			monMid.add(Calendar.DATE, 15);
-	        			emitChunk(acc,dev,monMid,myShard);
-	        			emitChunk(acc,dev,monEnd,myShard);
+	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
+	        			chunkOut.emitChunk(acc,dev,monEnd,myShard);
 	        			numChunks += 2;
 	        		} else if ( chunksRequired < 4L) {
 	        		//	System.out.println("Weekly for: "+mon);
 	        			monMid.add(Calendar.DATE, 7);
-	        			emitChunk(acc,dev,monMid,myShard);
+	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
 	        			monMid.add(Calendar.DATE, 7);
-	        			emitChunk(acc,dev,monMid,myShard);
+	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
 	        			monMid.add(Calendar.DATE, 7);
-	        			emitChunk(acc,dev,monMid,myShard);
-	        			emitChunk(acc,dev,monEnd,myShard);
+	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
+	        			chunkOut.emitChunk(acc,dev,monEnd,myShard);
 	        			numChunks += 4;
 	        		} else {
 	        		//	System.out.println("Daily for: "+mon);
 	        			for (int ii =1; ii < monFirst.getActualMaximum(Calendar.DAY_OF_MONTH);ii++) {
 	        				monMid.add(Calendar.DATE,1);
-	        				emitChunk(acc,dev,monMid,myShard);
+	        				chunkOut.emitChunk(acc,dev,monMid,myShard);
 	        				numChunks++;
 	        			}
 	        		}
 	        	}
 			}
-			emitChunk(acc,dev,maxkey,myShard);    /* Empty shard for future growth */
+			chunkOut.emitChunk(acc,dev,maxkey,myShard);    /* Empty shard for future growth */
         	myShard.addAllocatedChunks(numChunks+1);
         	if ((docCount-lastReportedDocs)> printEvery) {
         		System.out.println("Done "+docCount.toString());
@@ -294,7 +325,7 @@ public class App
 			return(0L); /* All data handled */
 		} else {  /* Not hot */
 			shard myShard = findShard(false);
-			emitChunk(acc,dev,minkey,myShard);
+			chunkOut.emitChunk(acc,dev,minkey,myShard);
 			myShard.addAllocatedChunks(1L);
         	if ((docCount-lastReportedDocs)> printEvery) {
         		System.out.println("Done "+docCount.toString());
@@ -327,99 +358,5 @@ public class App
 		return(found);
 	}
 	
-	private static void emitChunk(Long account,Long device,Calendar event, shard myShard) {
-		// 'deviceState.destColl-accountId_MinKeydeviceId_MinKeyeventDate_MinKey'
-		Long epoch = event.getTimeInMillis();
-		Date eventTS = Date.from(event.toInstant());
-		
-		Document endPt = new Document(key1,new BsonInt64(account))
-				.append(key2, new BsonInt64(device))
-				.append(key3, eventTS);
-		
-		//System.out.println(nextChunk);
-		
-    	Document docChunk = new Document("_id", nextChunk)
-    			.append("lastmod", new BsonTimestamp(1,0))
-    			.append("lastmodEpoch", new BsonObjectId())
-    			.append("ns", "deviceState.deviceState")
-    			.append("min", breakPt)
-    			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
-		
-    	nextChunk = splitColl+"-"+key1+"_"
-		+account.toString()+key2+"_"+device.toString()
-		+key3+"_new Date("+epoch.toString()+")";
-		
-    	try {
-    		chunkColl.insertOne(docChunk);
-    	} catch (Exception e) {
-    		System.out.println(e.getMessage());
-    		
-    	}
-    	breakPt = endPt;
-	}
-	
-	private static void emitChunk(Long account,Long device,MinKey event, shard myShard) {
 
-		
-		Document endPt = new Document(key1,new BsonInt64(account))
-				.append(key2, new BsonInt64(device))
-				.append(key3, event);
-		
-    	Document docChunk = new Document("_id", nextChunk)
-    			.append("lastmod", new BsonTimestamp(1,0))
-    			.append("lastmodEpoch", new BsonObjectId())
-    			.append("ns", "deviceState.deviceState")
-    			.append("min", breakPt)
-    			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
-    	
-    	nextChunk = splitColl+"-"+key1+"_"
-		+account.toString()+key2+"_"+device.toString()
-		+key3+"_MinKey";
-		
-    	chunkColl.insertOne(docChunk);
-    	breakPt = endPt;
-	}
-	
-	private static void emitChunk(Long account,Long device,MaxKey event, shard myShard) {
-
-		
-		Document endPt = new Document(key1,new BsonInt64(account))
-				.append(key2, new BsonInt64(device))
-				.append(key3, event);
-		
-    	Document docChunk = new Document("_id", nextChunk)
-    			.append("lastmod", new BsonTimestamp(1,0))
-    			.append("lastmodEpoch", new BsonObjectId())
-    			.append("ns", "deviceState.deviceState")
-    			.append("min", breakPt)
-    			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
-		
-    	nextChunk = splitColl+"-"+key1+"_"
-		+account.toString()+key2+"_"+device.toString()
-		+key3+"_MaxKey";
-    	chunkColl.insertOne(docChunk);
-    	breakPt = endPt;
-	}
-	
-	private static void emitChunk(MaxKey account,shard myShard) {
-
-		
-		Document endPt = new Document(key1,maxkey)
-				.append(key2, maxkey)
-				.append(key3, maxkey);
-		
-    	Document docChunk = new Document("_id", nextChunk)
-    			.append("lastmod", new BsonTimestamp(1,0))
-    			.append("lastmodEpoch", new BsonObjectId())
-    			.append("ns", "deviceState.deviceState")
-    			.append("min", breakPt)
-    			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
-		
-    	nextChunk = null;
-    	chunkColl.insertOne(docChunk);
-	}
 }
