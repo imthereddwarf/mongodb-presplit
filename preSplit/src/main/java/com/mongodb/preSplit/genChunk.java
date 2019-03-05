@@ -2,8 +2,11 @@ package com.mongodb.preSplit;
 
 import static com.mongodb.client.model.Filters.eq;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 
 import org.bson.BsonInt64;
 import org.bson.BsonTimestamp;
@@ -49,6 +52,7 @@ public class genChunk {
 		// 'deviceState.destColl-accountId_MinKeydeviceId_MinKeyeventDate_MinKey'
 
 		Long epoch = event.getTimeInMillis();
+		Instant epochNow = Instant.now();
 		Date eventTS = Date.from(event.toInstant());
 		
 		Document endPt = new Document(key1,new BsonInt64(account))
@@ -57,13 +61,17 @@ public class genChunk {
 		
 		//System.out.println(nextChunk);
 		count++;
+		List<Document> history = new ArrayList<>();
+		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
     	Document docChunk = new Document("_id", nextChunk)
     			.append("lastmod", new BsonTimestamp(2,count))
     			.append("lastmodEpoch", myEpoch)
     			.append("ns", ns)
     			.append("min", breakPt)
     			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
+    			.append("shard", myShard.getShardName())
+    			.append("history", history);
+  					
 		
     	nextChunk = ns+"-"+key1+"_"
 		+account.toString()+key2+"_"+device.toString()
@@ -80,18 +88,21 @@ public class genChunk {
 	
 	public void emitChunk(Long account,Long device,MinKey event, shard myShard) {
 
-		
+		Instant epochNow = Instant.now();
 		Document endPt = new Document(key1,new BsonInt64(account))
 				.append(key2, new BsonInt64(device))
 				.append(key3, event);
 		count++;
+		List<Document> history = new ArrayList<>();
+		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
     	Document docChunk = new Document("_id", nextChunk)
     			.append("lastmod", new BsonTimestamp(2,count))
     			.append("lastmodEpoch", myEpoch)
     			.append("ns", "deviceState.deviceState")
     			.append("min", breakPt)
     			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
+    			.append("shard", myShard.getShardName())
+    			.append("history", history);
     	
     	nextChunk = ns+"-"+key1+"_"
 		+account.toString()+key2+"_"+device.toString()
@@ -103,19 +114,22 @@ public class genChunk {
 	
 	public void emitChunk(Long account,Long device,MaxKey event, shard myShard) {
 
-		
+		Instant epochNow = Instant.now();
 		Document endPt = new Document(key1,new BsonInt64(account))
 				.append(key2, new BsonInt64(device))
 				.append(key3, event);
 		
 		count++;
+		List<Document> history = new ArrayList<>();
+		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
     	Document docChunk = new Document("_id", nextChunk)
     			.append("lastmod", new BsonTimestamp(2,count))
     			.append("lastmodEpoch", myEpoch)
     			.append("ns", "deviceState.deviceState")
     			.append("min", breakPt)
     			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
+    			.append("shard", myShard.getShardName())
+    			.append("history", history);
 		
     	nextChunk = ns+"-"+key1+"_"
 		+account.toString()+key2+"_"+device.toString()
@@ -126,19 +140,22 @@ public class genChunk {
 	
 	public void emitChunk(MaxKey account,shard myShard) {
 
-		
+		Instant epochNow = Instant.now();
 		Document endPt = new Document(key1,maxkey)
 				.append(key2, maxkey)
 				.append(key3, maxkey);
 		
 		count++;
+		List<Document> history = new ArrayList<>();
+		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
     	Document docChunk = new Document("_id", nextChunk)
     			.append("lastmod", new BsonTimestamp(1,count))
     			.append("lastmodEpoch", myEpoch)
     			.append("ns", "deviceState.deviceState")
     			.append("min", breakPt)
     			.append("max", endPt)
-    			.append("shard", myShard.getShardName());
+    			.append("shard", myShard.getShardName())
+    			.append("history", history);
 		
     	nextChunk = null;
     	chunkColl.insertOne(docChunk);

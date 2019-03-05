@@ -5,6 +5,7 @@ public class shard {
 	private final String shardName;
 	private Long allocatedChunks;
 	private Long hotDevices;
+	private final boolean isPrimary;
 	
 
 	public void addAllocatedChunks(Long allocatedChunks) {
@@ -15,10 +16,11 @@ public class shard {
 		this.hotDevices += hotDevices;
 	}
 
-	public shard(String name) {
+	public shard(String name, boolean primary) {
 		shardName = name;
 		allocatedChunks = 0L;
 		hotDevices = 0L;
+		isPrimary = primary;
 	}
 
 	public String getShardName() {
@@ -31,6 +33,10 @@ public class shard {
 
 	public Long getHotDevices() {
 		return hotDevices;
+	}
+	
+	public boolean getIsPrimary() {
+		return isPrimary;
 	}
 	
 }

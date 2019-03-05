@@ -89,6 +89,9 @@ public class App
 		key2 = defaultProps.getProperty("Key2");
 		key3 = defaultProps.getProperty("Key3");
 		splitColl = defaultProps.getProperty("TargetNS");
+		String dbcoll[] = splitColl.split("\\.");
+		String destDbName = dbcoll[0];
+		String destCollName = dbcoll[1];
 		
 		//System.out.println("Connection is: "+defaultProps.getProperty("SourceConnection"));
 		MongoClientURI srcURI = new MongoClientURI(defaultProps.getProperty("SourceConnection"));
@@ -99,25 +102,41 @@ public class App
         
         MongoClient destClient = new MongoClient(dstURI);
         MongoDatabase confDB = destClient.getDatabase("config");
-        MongoDatabase destDB = destClient.getDatabase(defaultProps.getProperty("DestinationDatabase"));
+        //String destDbName = defaultProps.getProperty("DestinationDatabase");
+        MongoDatabase destDB = destClient.getDatabase(destDbName);
         
+        /*
+         * Check the destination database is sharded and get the Primary
+         */
+        String primaryShard = null;
+        MongoCollection<Document> dbColl = confDB.getCollection("databases");
+        MongoCursor<Document> dbDef = dbColl.find(new Document("_id",destDbName)).iterator();
+        if (dbDef.hasNext()) {
+        	Document dbDoc = dbDef.next();
+        	primaryShard = dbDoc.getString("primary");
+        }
+        else {
+        	System.out.println(destDbName+" is not a sharded database.");
+        	return;
+        }
         /*
          * Check the destination collection is sharded
          */
+        Document collKeys = null;
+        
         MongoCollection<Document> collColl = confDB.getCollection("collections");
         MongoCursor<Document> collDef = collColl.find(new Document("_id",splitColl)).iterator();
         if (collDef.hasNext()) {
         	Document collDoc = collDef.next();
         	ObjectId epoch = collDoc.getObjectId("lastmodEpoch");
         	Date version = (Date) collDoc.get("lastmod");
-        	@SuppressWarnings("unchecked")
-			Document collKeys = (Document) collDoc.get("key");
+			collKeys = (Document) collDoc.get("key");
         	boolean collDroped = collDoc.getBoolean("dropped");
         	if (collDroped || !collKeys.getDouble(key1).equals(1.0)) {
         		System.out.println(splitColl+" is not an active sharded collection.");
         		return;
         	}
-            MongoCollection<Document> chunkColl = destDB.getCollection(defaultProps.getProperty("DestinationCollection"));
+            MongoCollection<Document> chunkColl = confDB.getCollection(defaultProps.getProperty("DestinationCollection"));
             chunkOut = new genChunk(splitColl,epoch,chunkColl,key1,key2,key3);
         }
         else {
@@ -131,22 +150,38 @@ public class App
         String pe = defaultProps.getProperty("PrintEvery","1000");
         printEvery = Long.parseLong(pe);
         
-        /*
-         *  Drop existing chunk definitions
-         */
-        chunkOut.clearChunks();
-        
+
         MongoCollection<Document> shardColl = confDB.getCollection("shards");
         MongoCursor<Document> shardCur = shardColl.find().iterator();
-        
         App.aShards = new shard[(int) shardColl.countDocuments()];
         
         i =0;
         while (shardCur.hasNext()) {
         	Document thisDoc = shardCur.next();
-        	shard newShard = new shard(thisDoc.getString("_id"));
+        	shard newShard = new shard(thisDoc.getString("_id"),thisDoc.getString("_id").equals(primaryShard));
         	aShards[i++] = newShard;
+        	/*
+        	 * If not primary create the Shard Key
+        	 */
+        	 if (!newShard.getIsPrimary()) {
+        		 String hostArr[] = thisDoc.getString("host").split("/");
+        		 MongoClientURI shardURI = new MongoClientURI("mongodb://"+hostArr[1]+"/?replicaSet="+hostArr[0]);
+	        	 MongoClient shardClient = new MongoClient(shardURI);
+	        	 MongoDatabase database = shardClient.getDatabase(destDbName);
+	        	 MongoCollection<Document> collection = database.getCollection(destCollName);
+	        	 collection.createIndex(collKeys);
+	        	 shardClient.close();
+        	 }
+        	 
         }
+        
+        
+        /*
+         *  Drop existing chunk definitions
+         */
+        chunkOut.clearChunks();
+        
+
         
         //MongoCollection<Document> shardColl = sourceDB.getCollection("shards");
         
@@ -245,7 +280,10 @@ public class App
 		for (shard test : App.aShards) {
 			System.out.println("Shard "+test.getShardName()+" "+test.getAllocatedChunks()+" chunks.");
 		}
-        
+		
+		MongoDatabase adminDB = destClient.getDatabase("admin");
+		Document result = adminDB.runCommand(new Document("flushRouterConfig","1"));
+		System.out.println("Router Cache Flushed");
         		
     }
 	private static Long generateChunk(Long acc, Long dev, LinkedList<monCount> perMonth,Long chunkEvents, Long noEvents, genChunk chunkOut) {
