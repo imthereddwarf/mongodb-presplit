@@ -151,6 +151,9 @@ public class App
         printEvery = Long.parseLong(pe);
         
 
+        String shardCreds = defaultProps.getProperty("ShardCredentials");
+        boolean createShards = defaultProps.getProperty("CreateSecondayShardIndex","true").toLowerCase().contentEquals("true");
+        
         MongoCollection<Document> shardColl = confDB.getCollection("shards");
         MongoCursor<Document> shardCur = shardColl.find().iterator();
         App.aShards = new shard[(int) shardColl.countDocuments()];
@@ -163,9 +166,13 @@ public class App
         	/*
         	 * If not primary create the Shard Key
         	 */
-        	 if (!newShard.getIsPrimary()) {
+        	 if (!newShard.getIsPrimary() && createShards) {
         		 String hostArr[] = thisDoc.getString("host").split("/");
-        		 MongoClientURI shardURI = new MongoClientURI("mongodb://"+hostArr[1]+"/?replicaSet="+hostArr[0]);
+        		 MongoClientURI shardURI = null;
+        		 if (shardCreds == null ) 
+        			 shardURI = new MongoClientURI("mongodb://"+hostArr[1]+"/?replicaSet="+hostArr[0]);
+        		 else
+        			 shardURI = new MongoClientURI("mongodb://"+shardCreds+"@"+hostArr[1]+"/?replicaSet="+hostArr[0]);
 	        	 MongoClient shardClient = new MongoClient(shardURI);
 	        	 MongoDatabase database = shardClient.getDatabase(destDbName);
 	        	 MongoCollection<Document> collection = database.getCollection(destCollName);
