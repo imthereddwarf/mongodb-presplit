@@ -44,9 +44,9 @@ public class App
     /*
      *  Decision constants
      */
-    private static final Long chunkFull = 17500L;
-    private static final Long chunkMax = 20000L;
-    private static final Long deviceHot = 20000L;
+    private static Long chunkFull = 17500L;
+    private static Long chunkMax = 20000L;
+    private static Long deviceHot = 20000L;
     
     
     private static String splitColl = "deviceState.deviceState";
@@ -150,6 +150,19 @@ public class App
         String pe = defaultProps.getProperty("PrintEvery","1000");
         printEvery = Long.parseLong(pe);
         
+
+        /*
+         * Calculate the Maximum number of documents per chunk
+         */
+        
+        Long blockSize = Long.parseLong(defaultProps.getProperty("ChunkSizeMb","64"))*1024L;
+        Long avgDocSize = Long.parseLong(defaultProps.getProperty("DocSizekb","3"));
+        
+        double docsPerBlock = blockSize / avgDocSize;
+        
+        chunkFull = (long)(docsPerBlock * 0.8);   // Consider a chunk full at 80%
+        chunkMax =  (long)(docsPerBlock * 0.9);   // Force a split based on the third level key if the same second level key accounts for > 90% of a chunk
+        deviceHot = (long)(docsPerBlock * 0.9);   // If the second level key is greater then 90% of a chunk distribute away from other Hot chunks
 
         String shardCreds = defaultProps.getProperty("ShardCredentials");
         boolean createShards = defaultProps.getProperty("CreateSecondayShardIndex","true").toLowerCase().contentEquals("true");
