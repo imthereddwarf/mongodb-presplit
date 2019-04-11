@@ -31,10 +31,10 @@ public class genChunk {
 	
     private static MongoCollection<Document> chunkColl = null;
     
-    private static Document breakPt = new Document("accountId",minkey)
-			.append("deviceId",minkey)
-			.append("eventDate",minkey);
-    private static String nextChunk = "deviceState.deviceState-accountId_MinKeydeviceId_MinKeyeventDate_Min";
+    private static Document breakPt;// = new Document("accountId",minkey)
+	//		.append("deviceId",minkey)
+	//		.append("eventDate",minkey);
+    private static String nextChunk;  // = "deviceState.deviceState-accountId_MinKeydeviceId_MinKeyeventDate_Min";
 	
 	
 	public genChunk(String name, ObjectId epoch, MongoCollection<Document> destination, String firstKey, String secondKey, 
@@ -46,6 +46,10 @@ public class genChunk {
 		key1 = firstKey;
 		key2 = secondKey;
 		key3 = thirdKey;
+		nextChunk = name+"="+firstKey+"_MinKey"+secondKey+"_MinKey"+thirdKey+"_Min";
+		breakPt = new Document(firstKey,minkey)
+						.append(secondKey,minkey)
+						.append(thirdKey,minkey);
 	}
 	
 	public void emitChunk(Long account,Long device,Calendar event, shard myShard) {
@@ -98,7 +102,7 @@ public class genChunk {
     	Document docChunk = new Document("_id", nextChunk)
     			.append("lastmod", new BsonTimestamp(2,count))
     			.append("lastmodEpoch", myEpoch)
-    			.append("ns", "deviceState.deviceState")
+    			.append("ns", ns)
     			.append("min", breakPt)
     			.append("max", endPt)
     			.append("shard", myShard.getShardName())
@@ -125,7 +129,7 @@ public class genChunk {
     	Document docChunk = new Document("_id", nextChunk)
     			.append("lastmod", new BsonTimestamp(2,count))
     			.append("lastmodEpoch", myEpoch)
-    			.append("ns", "deviceState.deviceState")
+    			.append("ns", ns)
     			.append("min", breakPt)
     			.append("max", endPt)
     			.append("shard", myShard.getShardName())
@@ -151,7 +155,7 @@ public class genChunk {
     	Document docChunk = new Document("_id", nextChunk)
     			.append("lastmod", new BsonTimestamp(1,count))
     			.append("lastmodEpoch", myEpoch)
-    			.append("ns", "deviceState.deviceState")
+    			.append("ns", ns)
     			.append("min", breakPt)
     			.append("max", endPt)
     			.append("shard", myShard.getShardName())
