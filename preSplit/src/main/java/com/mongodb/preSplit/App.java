@@ -74,6 +74,10 @@ public class App
 		if (args.length == 2 && args[0].equalsIgnoreCase("--config")) {
 			propsFile = args[1];
 		}
+		String myVersion = App.class.getPackage().getImplementationVersion();
+		
+		System.out.println("MongoDb Pre-split ["+myVersion+"]");
+		System.out.println("Runtime -> Java: "+System.getProperty("java.vendor")+ " " + System.getProperty("java.version") + " OS: "+System.getProperty("os.name")+" " +System.getProperty("os.version"));
 		// create and load default properties
 		Properties defaultProps = new Properties();
 		try {
@@ -222,9 +226,10 @@ public class App
         SimpleDateFormat genMon=new SimpleDateFormat("yyyyMM");
         
         LinkedList<monCount> splits = new LinkedList<monCount>();
+        Document thisRow = null;
         try {
 	        while (cursor.hasNext()) {
-	        	Document thisRow = cursor.next();
+	        	thisRow = cursor.next();
 	        	
 	        	Long in1, in2;
 	        	Date in3;
@@ -233,10 +238,13 @@ public class App
 	        		in2 = thisRow.getLong(key2);
 	        		in3 = thisRow.getDate(key3);
 	        	} catch (Exception e) {
-	        		System.out.println(e.getMessage());
+	        		String message = e.getMessage();
+	        		if (message == null)
+	        			message = e.toString();
+	        		System.out.println("Bad Key: "+e.getMessage());
 	        		continue; /* Unexpected key value - just skip */
 	        	}
-	        	if (in3 == null) continue; /* Ignore documents without an eventDate */
+	        	if (in1 == null || in2 == null || in3 == null) continue; /* Ignore documents without an full shard Key */
 	        	String inMon = genMon.format(in3);
 
 	        	if (in1.equals(curr1) && in2.equals(curr2) && inMon.contentEquals(curr3)) {
@@ -289,6 +297,7 @@ public class App
 	        }
         } catch(Exception e) {
         	System.out.println(e.getMessage());
+        	System.out.println(thisRow.toJson());
         	e.printStackTrace(System.out);
         }
         finally {        

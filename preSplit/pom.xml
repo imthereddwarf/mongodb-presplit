@@ -4,7 +4,7 @@
 
   <groupId>com.mongodb</groupId>
   <artifactId>preSplit</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>1.0.0</version>
   <packaging>jar</packaging>
 
   <name>preSplit</name>
@@ -38,6 +38,17 @@
                 <target>1.8</target>
             </configuration>
         </plugin>
+	    <plugin>
+	      <groupId>org.apache.maven.plugins</groupId>
+	      <artifactId>maven-jar-plugin</artifactId>
+	      <configuration>
+	        <archive>
+	          <manifest>
+	            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+	          </manifest>
+	        </archive>
+	      </configuration>
+	    </plugin>
   		 <plugin>
              <artifactId>maven-assembly-plugin</artifactId>
              <executions>
@@ -53,6 +64,7 @@
                      <manifest>
                          <addClasspath>true</addClasspath>
                          <mainClass>com.mongodb.preSplit.App</mainClass>
+                         <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                      </manifest>
                      <manifestEntries>
                          <Class-Path>.</Class-Path>
