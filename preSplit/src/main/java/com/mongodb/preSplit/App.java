@@ -16,9 +16,13 @@ import static com.mongodb.client.model.Filters.eq;
 import java.io.FileInputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+
+import org.bson.BsonDocument;
 import org.bson.BsonInt64;
 import org.bson.BsonObjectId;
 import org.bson.BsonTimestamp;
+import org.bson.BsonType;
+import org.bson.BsonValue;
 import org.bson.Document;
 import org.bson.types.MinKey;
 import org.bson.types.ObjectId;
@@ -230,7 +234,6 @@ public class App
         try {
 	        while (cursor.hasNext()) {
 	        	thisRow = cursor.next();
-	        	
 	        	Long in1, in2;
 	        	Date in3;
 	        	try {
@@ -241,7 +244,7 @@ public class App
 	        		String message = e.getMessage();
 	        		if (message == null)
 	        			message = e.toString();
-	        		System.out.println("Bad Key: "+e.getMessage());
+	        		System.out.println("Bad Key: "+thisRow.toJson()+" "+message);
 	        		continue; /* Unexpected key value - just skip */
 	        	}
 	        	if (in1 == null || in2 == null || in3 == null) continue; /* Ignore documents without an full shard Key */
