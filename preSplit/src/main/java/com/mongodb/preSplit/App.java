@@ -69,8 +69,9 @@ public class App
 		int i;
 		Long chunkEvents = 0l;
 		Long deviceEvents = 0l;
-		Long currentDevice = -1l;
-		long currentAccount = -1l;
+		Object currentDevice = null;
+		Object currentAccount = null;
+		Document currentKey = null;
 		genChunk chunkOut = null;
 		
 		String propsFile = "default.properties";
@@ -172,6 +173,7 @@ public class App
         chunkMax =  (long)(docsPerBlock * 0.9);   // Force a split based on the third level key if the same second level key accounts for > 90% of a chunk
         deviceHot = (long)(docsPerBlock * 0.9);   // If the second level key is greater then 90% of a chunk distribute away from other Hot chunks
 
+        //chunkFull = 2L; /* for testing */
         String shardCreds = defaultProps.getProperty("ShardCredentials");
         boolean createShards = defaultProps.getProperty("CreateSecondayShardIndex","true").toLowerCase().contentEquals("true");
         
@@ -223,8 +225,8 @@ public class App
         		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
         		.noCursorTimeout(true).iterator();   
         
-        Long curr1 = -1L;
-        Long curr2 = -1L;
+        Object curr1 = null;
+        Object curr2 = null;
         String curr3 = "";
         Long monthCount = 0l;
         SimpleDateFormat genMon=new SimpleDateFormat("yyyyMM");
@@ -234,20 +236,25 @@ public class App
         try {
 	        while (cursor.hasNext()) {
 	        	thisRow = cursor.next();
-	        	Long in1, in2;
+	        	//System.out.println(thisRow.toJson());
+	        	Object in1, in2;
 	        	Date in3;
 	        	try {
-	        		in1 = thisRow.getLong(key1);
-	        		in2 = thisRow.getLong(key2);
+	        		in1 = thisRow.get(key1);
+	        		in2 = thisRow.get(key2);
 	        		in3 = thisRow.getDate(key3);
 	        	} catch (Exception e) {
 	        		String message = e.getMessage();
 	        		if (message == null)
 	        			message = e.toString();
 	        		System.out.println("Bad Key: "+thisRow.toJson()+" "+message);
+	        		chunkEvents++;  // Skip but still counts
 	        		continue; /* Unexpected key value - just skip */
 	        	}
-	        	if (in1 == null || in2 == null || in3 == null) continue; /* Ignore documents without an full shard Key */
+	        	if (in1 == null || in2 == null || in3 == null) {
+	        		chunkEvents++;
+	        		continue; /* Ignore documents without an full shard Key */
+	        	}
 	        	String inMon = genMon.format(in3);
 
 	        	if (in1.equals(curr1) && in2.equals(curr2) && inMon.contentEquals(curr3)) {
@@ -255,8 +262,8 @@ public class App
 	        		continue;
 	        	}
 	        	//System.out.println(curr1.toString()+" - "+curr2.toString());
-	        	Long accid = curr1;
-	        	Long devid = curr2;
+	        	Object accid = curr1;
+	        	Object devid = curr2;
 	        	String mon = curr3;
 	        	Long count = monthCount;
         		curr1 = in1;
@@ -279,8 +286,13 @@ public class App
 	        		deviceEvents += count;
 	        	}
 	        	else {
+	        		if (currentAccount == null) {   // Set this doc as current if first time through
+	        			currentAccount = accid;
+	        			currentDevice = devid;
+	        			currentKey = thisRow;
+	        		}
 	        		if ( chunkEvents + deviceEvents > chunkFull) {  /* New device so break here */
-	        			chunkEvents = generateChunk(currentAccount,currentDevice, splits,chunkEvents, deviceEvents, chunkOut);
+	        			chunkEvents = generateChunk(currentAccount,currentDevice, currentKey, splits,chunkEvents, deviceEvents, chunkOut);
 	        			splits.clear();
 		        		monCount split = new monCount(mon,count);
 		        		splits.addFirst(split);
@@ -295,6 +307,7 @@ public class App
 	        		}
         			currentAccount = accid;
         			currentDevice = devid;
+        			currentKey = thisRow;
 	        		
 	        	}
 	        }
@@ -318,14 +331,14 @@ public class App
 		System.out.println("Router Cache Flushed");
         		
     }
-	private static Long generateChunk(Long acc, Long dev, LinkedList<monCount> perMonth,Long chunkEvents, Long noEvents, genChunk chunkOut) {
+	private static Long generateChunk(Object acc, Object dev, Document key, LinkedList<monCount> perMonth,Long chunkEvents, Long noEvents, genChunk chunkOut) {
 		
         SimpleDateFormat parser=new SimpleDateFormat("yyyyMMdd");
         docCount += chunkEvents;  /* Counts the preceding docs */
         
 		if (noEvents > deviceHot) {
 			shard myShard = findShard(true);
-			chunkOut.emitChunk(acc,dev,minkey,myShard);
+			chunkOut.emitChunk(key,minkey,myShard);
 			Long numChunks = 1L;
 			
 			ListIterator<monCount> i = perMonth.listIterator();
@@ -354,7 +367,7 @@ public class App
 	        	monEnd.add(Calendar.MONTH, 1);
 	        	if (count < chunkMax) {
 	        	//	System.out.println("1 Month for: "+mon);
-	        		chunkOut.emitChunk(acc,dev,monEnd,myShard);
+	        		chunkOut.emitChunk(key,monEnd,myShard);
 	        		numChunks++;
 	        	}
 	        	else {
@@ -363,30 +376,30 @@ public class App
 	        		if (chunksRequired == 2L) {     
 	        		//	System.out.println("2 per Month for: "+mon);
 	        			monMid.add(Calendar.DATE, 15);
-	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
-	        			chunkOut.emitChunk(acc,dev,monEnd,myShard);
+	        			chunkOut.emitChunk(key,monMid,myShard);
+	        			chunkOut.emitChunk(key,monEnd,myShard);
 	        			numChunks += 2;
 	        		} else if ( chunksRequired < 4L) {
 	        		//	System.out.println("Weekly for: "+mon);
 	        			monMid.add(Calendar.DATE, 7);
-	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
+	        			chunkOut.emitChunk(key,monMid,myShard);
 	        			monMid.add(Calendar.DATE, 7);
-	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
+	        			chunkOut.emitChunk(key,monMid,myShard);
 	        			monMid.add(Calendar.DATE, 7);
-	        			chunkOut.emitChunk(acc,dev,monMid,myShard);
-	        			chunkOut.emitChunk(acc,dev,monEnd,myShard);
+	        			chunkOut.emitChunk(key,monMid,myShard);
+	        			chunkOut.emitChunk(key,monEnd,myShard);
 	        			numChunks += 4;
 	        		} else {
 	        		//	System.out.println("Daily for: "+mon);
 	        			for (int ii =1; ii < monFirst.getActualMaximum(Calendar.DAY_OF_MONTH);ii++) {
 	        				monMid.add(Calendar.DATE,1);
-	        				chunkOut.emitChunk(acc,dev,monMid,myShard);
+	        				chunkOut.emitChunk(key,monMid,myShard);
 	        				numChunks++;
 	        			}
 	        		}
 	        	}
 			}
-			chunkOut.emitChunk(acc,dev,maxkey,myShard);    /* Empty shard for future growth */
+			chunkOut.emitChunk(key,maxkey,myShard);    /* Empty shard for future growth */
         	myShard.addAllocatedChunks(numChunks+1);
         	if ((docCount-lastReportedDocs)> printEvery) {
         		System.out.println("Done "+docCount.toString());
@@ -395,7 +408,7 @@ public class App
 			return(0L); /* All data handled */
 		} else {  /* Not hot */
 			shard myShard = findShard(false);
-			chunkOut.emitChunk(acc,dev,minkey,myShard);
+			chunkOut.emitChunk(key,minkey,myShard);
 			myShard.addAllocatedChunks(1L);
         	if ((docCount-lastReportedDocs)> printEvery) {
         		System.out.println("Done "+docCount.toString());

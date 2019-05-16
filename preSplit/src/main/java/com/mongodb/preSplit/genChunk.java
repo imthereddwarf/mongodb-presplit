@@ -90,6 +90,42 @@ public class genChunk {
     	breakPt = endPt;
 	}
 	
+	public void emitChunk(Document key,Calendar event, shard myShard) {
+		// 'deviceState.destColl-accountId_MinKeydeviceId_MinKeyeventDate_MinKey'
+
+		Long epoch = event.getTimeInMillis();
+		Instant epochNow = Instant.now();
+		Date eventTS = Date.from(event.toInstant());
+		
+		Document endPt = key;
+		endPt.put(key3, eventTS);
+		
+		//System.out.println(nextChunk);
+		count++;
+		List<Document> history = new ArrayList<>();
+		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
+    	Document docChunk = new Document("_id", nextChunk)
+    			.append("lastmod", new BsonTimestamp(2,count))
+    			.append("lastmodEpoch", myEpoch)
+    			.append("ns", ns)
+    			.append("min", breakPt)
+    			.append("max", endPt)
+    			.append("shard", myShard.getShardName())
+    			.append("history", history);
+  					
+    	nextChunk = ns+"-"+key1+"_"
+		+key.get(key1).toString()+key2+"_"+key.get(key2).toString()
+		+key3+"_new Date("+epoch.toString()+")";
+		
+    	try {
+    		chunkColl.insertOne(docChunk);
+    	} catch (Exception e) {
+    		System.out.println(e.getMessage());
+    		
+    	}
+    	breakPt = endPt;
+	}
+	
 	public void emitChunk(Long account,Long device,MinKey event, shard myShard) {
 
 		Instant epochNow = Instant.now();
@@ -116,6 +152,32 @@ public class genChunk {
     	breakPt = endPt;
 	}
 	
+	public void emitChunk(Document key,MinKey event, shard myShard) {
+
+		Instant epochNow = Instant.now();
+		Document endPt = key;
+		endPt.put(key3, event);
+		count++;
+		List<Document> history = new ArrayList<>();
+		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
+    	Document docChunk = new Document("_id", nextChunk)
+    			.append("lastmod", new BsonTimestamp(2,count))
+    			.append("lastmodEpoch", myEpoch)
+    			.append("ns", ns)
+    			.append("min", breakPt)
+    			.append("max", endPt)
+    			.append("shard", myShard.getShardName())
+    			.append("history", history);
+    	
+    	nextChunk = ns+"-"+key1+"_"
+		+key.get(key1).toString()+key2+"_"+key.get(key2).toString()
+		+key3+"_MinKey";
+		
+    	chunkColl.insertOne(docChunk);
+    	breakPt = endPt;
+	}
+	
+	
 	public void emitChunk(Long account,Long device,MaxKey event, shard myShard) {
 
 		Instant epochNow = Instant.now();
@@ -138,6 +200,31 @@ public class genChunk {
     	nextChunk = ns+"-"+key1+"_"
 		+account.toString()+key2+"_"+device.toString()
 		+key3+"_MaxKey";
+    	chunkColl.insertOne(docChunk);
+    	breakPt = endPt;
+	}
+	
+	public void emitChunk(Document key,MaxKey event, shard myShard) {
+
+		Instant epochNow = Instant.now();
+		Document endPt = key;
+		endPt.put(key3, event);
+		count++;
+		List<Document> history = new ArrayList<>();
+		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
+    	Document docChunk = new Document("_id", nextChunk)
+    			.append("lastmod", new BsonTimestamp(2,count))
+    			.append("lastmodEpoch", myEpoch)
+    			.append("ns", ns)
+    			.append("min", breakPt)
+    			.append("max", endPt)
+    			.append("shard", myShard.getShardName())
+    			.append("history", history);
+    	
+    	nextChunk = ns+"-"+key1+"_"
+		+key.get(key1).toString()+key2+"_"+key.get(key2).toString()
+		+key3+"_MaxKey";
+		
     	chunkColl.insertOne(docChunk);
     	breakPt = endPt;
 	}
