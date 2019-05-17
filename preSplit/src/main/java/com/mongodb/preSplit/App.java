@@ -243,6 +243,7 @@ public class App
 	        		in1 = thisRow.get(key1);
 	        		in2 = thisRow.get(key2);
 	        		in3 = thisRow.getDate(key3);
+	        		
 	        	} catch (Exception e) {
 	        		String message = e.getMessage();
 	        		if (message == null)
@@ -257,7 +258,7 @@ public class App
 	        	}
 	        	String inMon = genMon.format(in3);
 
-	        	if (in1.equals(curr1) && in2.equals(curr2) && inMon.contentEquals(curr3)) {
+	        	if ((in1.equals(curr1) || numeric.equals(in1, curr1)) && (in2.equals(curr2) || numeric.equals(in2, curr2)) && inMon.contentEquals(curr3)) {
 	        		monthCount++;
 	        		continue;
 	        	}
