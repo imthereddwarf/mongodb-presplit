@@ -97,7 +97,8 @@ public class genChunk {
 		Instant epochNow = Instant.now();
 		Date eventTS = Date.from(event.toInstant());
 		
-		Document endPt = key;
+		Document endPt = new Document();
+		copyKey(key,endPt);
 		endPt.put(key3, eventTS);
 		
 		//System.out.println(nextChunk);
@@ -155,7 +156,8 @@ public class genChunk {
 	public void emitChunk(Document key,MinKey event, shard myShard) {
 
 		Instant epochNow = Instant.now();
-		Document endPt = key;
+		Document endPt = new Document();
+		copyKey(key,endPt);
 		endPt.put(key3, event);
 		count++;
 		List<Document> history = new ArrayList<>();
@@ -207,7 +209,8 @@ public class genChunk {
 	public void emitChunk(Document key,MaxKey event, shard myShard) {
 
 		Instant epochNow = Instant.now();
-		Document endPt = key;
+		Document endPt = new Document();
+		copyKey(key,endPt);
 		endPt.put(key3, event);
 		count++;
 		List<Document> history = new ArrayList<>();
@@ -256,4 +259,9 @@ public class genChunk {
 		chunkColl.deleteMany(eq("ns", ns));
 	}
 	
+	private void copyKey(Document in, Document out) {
+		out.put(key1, in.get(key1));
+		out.put(key2, in.get(key2));
+		out.put(key3, in.get(key3));		
+	}
 }

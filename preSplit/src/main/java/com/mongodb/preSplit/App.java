@@ -173,6 +173,8 @@ public class App
         chunkMax =  (long)(docsPerBlock * 0.9);   // Force a split based on the third level key if the same second level key accounts for > 90% of a chunk
         deviceHot = (long)(docsPerBlock * 0.9);   // If the second level key is greater then 90% of a chunk distribute away from other Hot chunks
 
+        System.out.println("ChunkFull: "+chunkFull.toString()+ " ChunkMax: "+chunkMax.toString()+" DeviceHot: "+deviceHot.toString());
+        
         //chunkFull = 2L; /* for testing */
         String shardCreds = defaultProps.getProperty("ShardCredentials");
         boolean createShards = defaultProps.getProperty("CreateSecondayShardIndex","true").toLowerCase().contentEquals("true");
