@@ -292,7 +292,7 @@ public class App
 	        		if (currentAccount == null) {   // Set this doc as current if first time through
 	        			currentAccount = accid;
 	        			currentDevice = devid;
-	        			currentKey = thisRow;
+	        			currentKey = cloneKey(thisRow);
 	        		}
 	        		if ( chunkEvents + deviceEvents > chunkFull) {  /* New device so break here */
 	        			chunkEvents = generateChunk(currentAccount,currentDevice, currentKey, splits,chunkEvents, deviceEvents, chunkOut);
@@ -310,7 +310,7 @@ public class App
 	        		}
         			currentAccount = accid;
         			currentDevice = devid;
-        			currentKey = thisRow;
+        			currentKey = cloneKey(thisRow);
 	        		
 	        	}
 	        }
@@ -442,6 +442,14 @@ public class App
 		}
 		if (isHot) found.addHotDevice(1L);
 		return(found);
+	}
+	
+	private static Document cloneKey(Document row) {
+		Document key = new Document(key1,row.get(key1))
+				.append(key2, row.get(key2))
+				.append(key3, row.get(key3));
+		return(key);
+		
 	}
 	
 
