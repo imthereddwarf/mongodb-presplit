@@ -4,7 +4,7 @@
 
   <groupId>com.mongodb</groupId>
   <artifactId>preSplit</artifactId>
-  <version>0.1.8</version>
+  <version>0.1.9</version>
   <packaging>jar</packaging>
 
   <name>preSplit</name>

@@ -267,6 +267,7 @@ public class App
 	        	//System.out.println(curr1.toString()+" - "+curr2.toString());
 	        	Object accid = curr1;
 	        	Object devid = curr2;
+	        	Document fullKey = cloneKey(thisRow);
 	        	String mon = curr3;
 	        	Long count = monthCount;
         		curr1 = in1;
@@ -283,7 +284,8 @@ public class App
 	        	 * Finished counting a month
 	        	 */
 
-	        	if (accid.equals(currentAccount) && devid.equals(currentDevice)) {  /* Same Device */
+	        	if ((accid.equals(currentAccount) || numeric.equals(accid,currentAccount)) && 
+	        			(devid.equals(currentDevice) || numeric.equals(devid, currentDevice))) {  /* Same Device */
 	        		monCount split = new monCount(mon,count);
 	        		splits.addFirst(split);
 	        		deviceEvents += count;
@@ -292,7 +294,7 @@ public class App
 	        		if (currentAccount == null) {   // Set this doc as current if first time through
 	        			currentAccount = accid;
 	        			currentDevice = devid;
-	        			currentKey = cloneKey(thisRow);
+	        			currentKey = cloneKey(fullKey);
 	        		}
 	        		if ( chunkEvents + deviceEvents > chunkFull) {  /* New device so break here */
 	        			chunkEvents = generateChunk(currentAccount,currentDevice, currentKey, splits,chunkEvents, deviceEvents, chunkOut);
@@ -310,7 +312,7 @@ public class App
 	        		}
         			currentAccount = accid;
         			currentDevice = devid;
-        			currentKey = cloneKey(thisRow);
+        			currentKey = cloneKey(fullKey);
 	        		
 	        	}
 	        }
