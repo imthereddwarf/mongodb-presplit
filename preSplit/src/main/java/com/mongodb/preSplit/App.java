@@ -230,6 +230,7 @@ public class App
         Object curr1 = null;
         Object curr2 = null;
         String curr3 = "";
+        Document currKey = null;
         Long monthCount = 0l;
         SimpleDateFormat genMon=new SimpleDateFormat("yyyyMM");
         
@@ -267,12 +268,13 @@ public class App
 	        	//System.out.println(curr1.toString()+" - "+curr2.toString());
 	        	Object accid = curr1;
 	        	Object devid = curr2;
-	        	Document fullKey = cloneKey(thisRow);
+	        	Document fullKey = currKey;
 	        	String mon = curr3;
 	        	Long count = monthCount;
         		curr1 = in1;
         		curr2 = in2;
         		curr3 = inMon;
+        		currKey = cloneKey(thisRow);
 
         		
 	        	if (monthCount.equals(0L)) { /* First time through no data to record */
