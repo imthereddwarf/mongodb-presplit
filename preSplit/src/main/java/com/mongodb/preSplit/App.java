@@ -73,6 +73,7 @@ public class App
 		Object currentAccount = null;
 		Document currentKey = null;
 		genChunk chunkOut = null;
+		boolean doDebug = false;
 		
 		String propsFile = "default.properties";
 		
@@ -94,6 +95,8 @@ public class App
 			return;
 		}
 
+		if (defaultProps.getProperty("debug", "false").equals("true"))
+			doDebug = true;
 		key1 = defaultProps.getProperty("Key1");
 		key2 = defaultProps.getProperty("Key2");
 		key3 = defaultProps.getProperty("Key3");
@@ -254,6 +257,11 @@ public class App
 	        		System.out.println("Bad Key: "+thisRow.toJson()+" "+message);
 	        		chunkEvents++;  // Skip but still counts
 	        		continue; /* Unexpected key value - just skip */
+	        	}
+	        	if (doDebug) {
+	        		System.out.println("Chunk _ID would be: "+splitColl+"-"+key1+"_"
+	        		    	+numeric.asString(thisRow.get(key1))+key2+"_"+numeric.asString(thisRow.get(key2))
+	        				+key3+"_MaxKey");
 	        	}
 	        	if (in1 == null || in2 == null || in3 == null) {
 	        		chunkEvents++;

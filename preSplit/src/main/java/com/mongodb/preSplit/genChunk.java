@@ -115,7 +115,7 @@ public class genChunk {
     			.append("history", history);
   					
     	nextChunk = ns+"-"+key1+"_"
-		+key.get(key1).toString()+key2+"_"+key.get(key2).toString()
+		+numeric.asString(key.get(key1))+key2+"_"+numeric.asString(key.get(key2))
 		+key3+"_new Date("+epoch.toString()+")";
 		
     	try {
@@ -172,7 +172,7 @@ public class genChunk {
     			.append("history", history);
     	
     	nextChunk = ns+"-"+key1+"_"
-		+key.get(key1).toString()+key2+"_"+key.get(key2).toString()
+    	+numeric.asString(key.get(key1))+key2+"_"+numeric.asString(key.get(key2))
 		+key3+"_MinKey";
 		
     	chunkColl.insertOne(docChunk);
@@ -225,7 +225,7 @@ public class genChunk {
     			.append("history", history);
     	
     	nextChunk = ns+"-"+key1+"_"
-		+key.get(key1).toString()+key2+"_"+key.get(key2).toString()
+    	+numeric.asString(key.get(key1))+key2+"_"+numeric.asString(key.get(key2))
 		+key3+"_MaxKey";
 		
     	chunkColl.insertOne(docChunk);
@@ -264,4 +264,5 @@ public class genChunk {
 		out.put(key2, in.get(key2));
 		out.put(key3, in.get(key3));		
 	}
+	
 }

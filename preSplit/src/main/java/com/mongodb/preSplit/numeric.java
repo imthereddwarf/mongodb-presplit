@@ -37,5 +37,20 @@ public class numeric {
 		else
 			return ((Double)in).longValue();
 	}
+	
+	static String asString(Object in) {
+		if (in instanceof Long)
+			return ((Long)in).toString();
+		if (in instanceof Integer)
+			return ((Integer)in).toString();
+		if (in instanceof String)
+			return "\""+(String)in+"\"";
+		if (in instanceof Double)
+			return String.format( "%.1f", (Double)in );
+		if (in == null)
+			return("null");
+		else
+			return in.toString();
+	}
 
 }
