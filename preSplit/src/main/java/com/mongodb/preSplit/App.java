@@ -45,6 +45,8 @@ public class App
     private static final MinKey minkey = new MinKey();
     private static final MaxKey maxkey = new MaxKey();
     
+    private static final Date maxDate = new Date(193444185599000L); // 12-31-8099 23:59:59
+    
     /*
      *  Decision constants
      */
@@ -222,20 +224,33 @@ public class App
         
         MongoCollection<Document> sourceColl = sourceDB.getCollection(defaultProps.getProperty("StatsCollection"));
         //FindIterable<Document> documents = sourceColl.find().sort(Sorts.orderBy(Sorts.ascending("_id")))
-        MongoCursor<Document> cursor = sourceColl.find()
-        		.projection(new Document("_id",0)
-        		.append(key1,1)
-        		.append(key2,1)
-        		.append(key3,1))
-        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
-        		.noCursorTimeout(true).iterator();   
+        String sourceFilter = defaultProps.getProperty("sourceFilter","{}");
+        MongoCursor<Document> cursor = null;
+        if (sourceFilter.contentEquals("{}")) {
+	        cursor = sourceColl.find()
+	        		.projection(new Document("_id",0)
+	        		.append(key1,1)
+	        		.append(key2,1)
+	        		.append(key3,1))
+	        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
+	        		.noCursorTimeout(true).iterator();   
+        } else {
+        	System.out.println("Applying filter: "+sourceFilter+".");
+	        cursor = sourceColl.find(Document.parse(sourceFilter))
+	        		.projection(new Document("_id",0)
+	        		.append(key1,1)
+	        		.append(key2,1)
+	        		.append(key3,1))
+	        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
+	        		.noCursorTimeout(true).iterator();   
+        }
         
         Object curr1 = null;
         Object curr2 = null;
         String curr3 = "";
         Document currKey = null;
         Long monthCount = 0l;
-        SimpleDateFormat genMon=new SimpleDateFormat("yyyyMM");
+        SimpleDateFormat genMon=new SimpleDateFormat("yyyyyMM");
         
         LinkedList<monCount> splits = new LinkedList<monCount>();
         Document thisRow = null;
@@ -258,25 +273,35 @@ public class App
 	        		chunkEvents++;  // Skip but still counts
 	        		continue; /* Unexpected key value - just skip */
 	        	}
-	        	if (doDebug) {
-	        		System.out.println("Chunk _ID would be: "+splitColl+"-"+key1+"_"
-	        		    	+numeric.asString(thisRow.get(key1))+key2+"_"+numeric.asString(thisRow.get(key2))
-	        				+key3+"_MaxKey");
-	        	}
+
 	        	if (in1 == null || in2 == null || in3 == null) {
 	        		chunkEvents++;
 	        		continue; /* Ignore documents without an full shard Key */
 	        	}
+	        	if (in3.after(maxDate)) {
+	        		chunkEvents++;
+	        		continue;  /* skip events in the 10th millenium */
+	        	}
 	        	String inMon = genMon.format(in3);
 
-	        	if ((in1.equals(curr1) || numeric.equals(in1, curr1)) && (in2.equals(curr2) || numeric.equals(in2, curr2)) && inMon.contentEquals(curr3)) {
+	        	if ((in1.equals(curr1) || numeric.equals(in1, curr1)) && 
+	        			(in2.equals(curr2) || numeric.equals(in2, curr2)) && 
+	        			inMon.contentEquals(curr3)) {
 	        		monthCount++;
 	        		continue;
+	        	}
+	        	if (doDebug) {
+	        		if (currKey == null)
+	        			System.out.println("First shard month at: "+thisRow.toJson()+".");
+	        		else
+	        			System.out.println("Change of shard month at: "+thisRow.toJson()+
+	        					". Was "+curr1.toString()+"-"+curr2.toString()+"-"
+	        					+curr3.toString()+"Old Key: "+currKey.toJson());
 	        	}
 	        	//System.out.println(curr1.toString()+" - "+curr2.toString());
 	        	Object accid = curr1;
 	        	Object devid = curr2;
-	        	Document fullKey = currKey;
+	        	Document fullKey = cloneKey(currKey);
 	        	String mon = curr3;
 	        	Long count = monthCount;
         		curr1 = in1;
@@ -457,6 +482,7 @@ public class App
 	}
 	
 	private static Document cloneKey(Document row) {
+		if (row == null) return(null);
 		Document key = new Document(key1,row.get(key1))
 				.append(key2, row.get(key2))
 				.append(key3, row.get(key3));

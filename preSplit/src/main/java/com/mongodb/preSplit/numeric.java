@@ -4,9 +4,9 @@ public class numeric {
 	public static boolean equals(Object one, Object two) {
 		if ((one instanceof Long || one instanceof Integer) &&
 			(two instanceof Long || two instanceof Integer)) {
-			if (getLValue(one) == getLValue(two))
+			if (getLValue(one).equals(getLValue(two)))
 				return(true);
-			else
+			else 
 				return(false);
 		}
 		else {
