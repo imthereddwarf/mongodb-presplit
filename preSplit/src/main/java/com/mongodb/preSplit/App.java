@@ -250,7 +250,7 @@ public class App
         String curr3 = "";
         Document currKey = null;
         Long monthCount = 0l;
-        SimpleDateFormat genMon=new SimpleDateFormat("yyyyyMM");
+        SimpleDateFormat genMon=new SimpleDateFormat("yyyyMM");
         
         LinkedList<monCount> splits = new LinkedList<monCount>();
         Document thisRow = null;
