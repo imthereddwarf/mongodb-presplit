@@ -2,31 +2,16 @@ package com.mongodb.preSplit;
 
 import java.util.Calendar;
 import java.util.Date;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.ListIterator;
-import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
-
-import static com.mongodb.client.model.Filters.eq;
-
 import java.io.FileInputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 
-import org.bson.BsonDocument;
-import org.bson.BsonInt64;
-import org.bson.BsonObjectId;
-import org.bson.BsonTimestamp;
-import org.bson.BsonType;
-import org.bson.BsonValue;
 import org.bson.Document;
 import org.bson.types.MinKey;
 import org.bson.types.ObjectId;
-import org.bson.types.BSONTimestamp;
 import org.bson.types.MaxKey;
 
 import com.mongodb.MongoClient;
@@ -46,6 +31,7 @@ public class App
     private static final MaxKey maxkey = new MaxKey();
     
     private static final Date maxDate = new Date(193444185599000L); // 12-31-8099 23:59:59
+    private static final Date dateNotSet = new Date(-28502755200000L);  // Battle of Hasting 10/14/1066
     
     /*
      *  Decision constants
@@ -59,6 +45,7 @@ public class App
     private static String key1 = "accountId";
     private static String key2 = "deviceId";
     private static String key3 = "EventDate";
+    private static Integer numKeys = 3;
     
     private static shard aShards[];
     private static Long docCount = 0l;
@@ -101,7 +88,9 @@ public class App
 			doDebug = true;
 		key1 = defaultProps.getProperty("Key1");
 		key2 = defaultProps.getProperty("Key2");
-		key3 = defaultProps.getProperty("Key3");
+		key3 = defaultProps.getProperty("Key3","Not Set");
+		if (key3.contentEquals("Not Set")) numKeys =2;
+		
 		splitColl = defaultProps.getProperty("TargetNS");
 		String dbcoll[] = splitColl.split("\\.");
 		String destDbName = dbcoll[0];
@@ -151,7 +140,10 @@ public class App
         		return;
         	}
             MongoCollection<Document> chunkColl = confDB.getCollection(defaultProps.getProperty("DestinationCollection"));
-            chunkOut = new genChunk(splitColl,epoch,chunkColl,key1,key2,key3);
+            if (numKeys == 3)
+            	chunkOut = new genChunk3(splitColl,epoch,chunkColl,key1,key2,key3);
+            else
+            	chunkOut = new genChunk2(splitColl,epoch,chunkColl,key1,key2);
         }
         else {
         	System.out.println(splitColl+" is not a sharded collection.");
@@ -227,13 +219,22 @@ public class App
         String sourceFilter = defaultProps.getProperty("sourceFilter","{}");
         MongoCursor<Document> cursor = null;
         if (sourceFilter.contentEquals("{}")) {
-	        cursor = sourceColl.find()
+        	if (numKeys == 3) {
+        		cursor = sourceColl.find()
 	        		.projection(new Document("_id",0)
 	        		.append(key1,1)
 	        		.append(key2,1)
 	        		.append(key3,1))
 	        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
 	        		.noCursorTimeout(true).iterator();   
+        	} else {
+        		cursor = sourceColl.find()
+    	        		.projection(new Document("_id",0)
+    	        		.append(key1,1)
+    	        		.append(key2,1))
+    	        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2)))
+    	        		.noCursorTimeout(true).iterator();  
+        	}
         } else {
         	System.out.println("Applying filter: "+sourceFilter+".");
 	        cursor = sourceColl.find(Document.parse(sourceFilter))
@@ -263,7 +264,10 @@ public class App
 	        	try {
 	        		in1 = thisRow.get(key1);
 	        		in2 = thisRow.get(key2);
-	        		in3 = thisRow.getDate(key3);
+	        		if (numKeys == 3)
+	        			in3 = thisRow.getDate(key3);
+	        		else 
+	        			in3 = dateNotSet;
 	        		
 	        	} catch (Exception e) {
 	        		String message = e.getMessage();
@@ -332,7 +336,7 @@ public class App
 	        			currentKey = cloneKey(fullKey);
 	        		}
 	        		if ( chunkEvents + deviceEvents > chunkFull) {  /* New device so break here */
-	        			chunkEvents = generateChunk(currentAccount,currentDevice, currentKey, splits,chunkEvents, deviceEvents, chunkOut);
+        			chunkEvents = generateChunk(currentAccount,currentDevice, currentKey, splits,chunkEvents, deviceEvents, chunkOut);
 	        			splits.clear();
 		        		monCount split = new monCount(mon,count);
 		        		splits.addFirst(split);
@@ -405,7 +409,7 @@ public class App
 	        	monFirst.setTime(monStart);
 	        	Calendar monEnd = (Calendar)monFirst.clone();
 	        	monEnd.add(Calendar.MONTH, 1);
-	        	if (count < chunkMax) {
+	        	if (count < chunkMax || numKeys == 2) {   // Device fits in one shard or no date
 	        	//	System.out.println("1 Month for: "+mon);
 	        		chunkOut.emitChunk(key,monEnd,myShard);
 	        		numChunks++;
@@ -439,7 +443,8 @@ public class App
 	        		}
 	        	}
 			}
-			chunkOut.emitChunk(key,maxkey,myShard);    /* Empty shard for future growth */
+			if (numKeys == 3)
+				chunkOut.emitChunk(key,maxkey,myShard);    /* Empty shard for future growth */
         	myShard.addAllocatedChunks(numChunks+1);
         	if ((docCount-lastReportedDocs)> printEvery) {
         		System.out.println("Done "+docCount.toString());
