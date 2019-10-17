@@ -54,7 +54,7 @@ public class genChunk2 implements genChunk{
 		
 		Document endPt = new Document(key1,new BsonInt64(account))
 				.append(key2, new BsonInt64(device));
-		
+		if (endPt.equals(breakPt)) return;		
 		//System.out.println(nextChunk);
 		count++;
 		List<Document> history = new ArrayList<>();
@@ -89,7 +89,7 @@ public class genChunk2 implements genChunk{
 		
 		Document endPt = new Document();
 		copyKey(key,endPt);
-
+		if (endPt.equals(breakPt)) return;
 		
 		//System.out.println(nextChunk);
 		count++;
@@ -122,6 +122,7 @@ public class genChunk2 implements genChunk{
 		Instant epochNow = Instant.now();
 		Document endPt = new Document(key1,new BsonInt64(account))
 				.append(key2, new BsonInt64(device));
+		if (endPt.equals(breakPt)) return;
 		count++;
 		List<Document> history = new ArrayList<>();
 		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
@@ -147,7 +148,7 @@ public class genChunk2 implements genChunk{
 		Instant epochNow = Instant.now();
 		Document endPt = new Document();
 		copyKey(key,endPt);
-
+		if (endPt.equals(breakPt)) return;
 		count++;
 		List<Document> history = new ArrayList<>();
 		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
@@ -174,7 +175,7 @@ public class genChunk2 implements genChunk{
 		Instant epochNow = Instant.now();
 		Document endPt = new Document(key1,new BsonInt64(account))
 				.append(key2, new BsonInt64(device));
-		
+		if (endPt.equals(breakPt)) return;
 		count++;
 		List<Document> history = new ArrayList<>();
 		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
@@ -198,7 +199,7 @@ public class genChunk2 implements genChunk{
 		Instant epochNow = Instant.now();
 		Document endPt = new Document();
 		copyKey(key,endPt);
-
+		if (endPt.equals(breakPt)) return;
 		count++;
 		List<Document> history = new ArrayList<>();
 		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));
@@ -224,7 +225,7 @@ public class genChunk2 implements genChunk{
 		Instant epochNow = Instant.now();
 		Document endPt = new Document(key1,maxkey)
 				.append(key2, maxkey);
-		
+		if (endPt.equals(breakPt)) return;
 		count++;
 		List<Document> history = new ArrayList<>();
 		history.add(new Document("validAfter", new BsonTimestamp((int)epochNow.getEpochSecond(),0)).append("shard", myShard.getShardName()));

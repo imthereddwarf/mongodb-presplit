@@ -237,13 +237,22 @@ public class App
         	}
         } else {
         	System.out.println("Applying filter: "+sourceFilter+".");
-	        cursor = sourceColl.find(Document.parse(sourceFilter))
+        	if (numKeys == 3) {
+        		cursor = sourceColl.find(Document.parse(sourceFilter))
+    	        		.projection(new Document("_id",0)
+    	        		.append(key1,1)
+    	        		.append(key2,1)
+    	        		.append(key3,1))
+    	        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
+    	        		.noCursorTimeout(true).iterator(); 
+        	} else {
+        		cursor = sourceColl.find(Document.parse(sourceFilter))
 	        		.projection(new Document("_id",0)
 	        		.append(key1,1)
-	        		.append(key2,1)
-	        		.append(key3,1))
-	        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2),Sorts.descending(key3)))
+	        		.append(key2,1))
+	        		.sort(Sorts.orderBy(Sorts.ascending(key1,key2)))
 	        		.noCursorTimeout(true).iterator();   
+        	}
         }
         
         Object curr1 = null;
