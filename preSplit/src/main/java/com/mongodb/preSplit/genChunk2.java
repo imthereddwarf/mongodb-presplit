@@ -42,7 +42,7 @@ public class genChunk2 implements genChunk{
 		chunkColl = destination;
 		key1 = firstKey;
 		key2 = secondKey;
-		nextChunk = name+"="+firstKey+"_MinKey"+secondKey+"_MinKey";
+		nextChunk = name+"-"+firstKey+"_MinKey"+secondKey+"_MinKey";
 		breakPt = new Document(firstKey,minkey)
 						.append(secondKey,minkey);
 	}

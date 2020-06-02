@@ -46,7 +46,7 @@ public class genChunk3 implements genChunk{
 		key1 = firstKey;
 		key2 = secondKey;
 		key3 = thirdKey;
-		nextChunk = name+"="+firstKey+"_MinKey"+secondKey+"_MinKey"+thirdKey+"_Min";
+		nextChunk = name+"-"+firstKey+"_MinKey"+secondKey+"_MinKey"+thirdKey+"_Min";
 		breakPt = new Document(firstKey,minkey)
 						.append(secondKey,minkey)
 						.append(thirdKey,minkey);
